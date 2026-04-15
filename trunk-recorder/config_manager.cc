@@ -37,9 +37,9 @@ static std::vector<std::string> split_csv_line(const std::string &line) {
   std::string field;
   std::istringstream iss(line);
   while (std::getline(iss, field, ',')) {
-    // trim leading/trailing whitespace
-    size_t start = field.find_first_not_of(" \t");
-    size_t end = field.find_last_not_of(" \t");
+    // trim leading/trailing whitespace and any trailing CR (handles CRLF input)
+    size_t start = field.find_first_not_of(" \t\r");
+    size_t end = field.find_last_not_of(" \t\r");
     if (start == std::string::npos) {
       fields.push_back("");
     } else {
