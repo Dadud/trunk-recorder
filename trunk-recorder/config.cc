@@ -233,6 +233,17 @@ bool load_config(string config_file, Config &config, gr::top_block_sptr &tb, std
     config.filename_format = data.value("filenameFormat", "");
     BOOST_LOG_TRIVIAL(info) << "Filename Format: " << (config.filename_format.empty() ? "(default)" : config.filename_format);
 
+    if (data.contains("api") && data["api"].is_object()) {
+      const json &api = data["api"];
+      config.api_enabled = api.value("enabled", false);
+      config.api_bind_host = api.value("bind", "127.0.0.1");
+      config.api_port = api.value("port", 8765);
+      config.api_token = api.value("token", "");
+    }
+    BOOST_LOG_TRIVIAL(info) << "Management API Enabled: " << config.api_enabled;
+    BOOST_LOG_TRIVIAL(info) << "Management API Bind: " << config.api_bind_host;
+    BOOST_LOG_TRIVIAL(info) << "Management API Port: " << config.api_port;
+
     statusAsString = data.value("statusAsString", statusAsString);
     BOOST_LOG_TRIVIAL(info) << "Status as String: " << statusAsString;
     std::string log_level = data.value("logLevel", "info");

@@ -38,9 +38,13 @@ struct Config {
   std::string debug_recorder_address;
   std::string log_dir;
   std::string default_mode;
+  std::string api_bind_host = "127.0.0.1";
+  std::string api_token;
   bool new_call_from_update;
   bool debug_recorder;
+  bool api_enabled = false;
   int debug_recorder_port;
+  int api_port = 8765;
   double call_timeout;
   bool console_log;
   bool log_file;

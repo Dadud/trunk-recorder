@@ -206,6 +206,7 @@ include_directories(
     ${OPENSSL_INCLUDE_DIR}
     ${CURL_INCLUDE_DIR}
     "lib"
+    "lib/httplib"
 )
 #    ${PROTOBUF_INCLUDE_DIR}
 #    ${GRPC_INCLUDE_DIR}
@@ -273,6 +274,7 @@ list(APPEND trunk_recorder_sources
   trunk-recorder/sources/iq_file_source.cc
   trunk-recorder/csv_helper.cc
   trunk-recorder/config.cc
+  trunk-recorder/config_manager.cc
   trunk-recorder/setup_systems.cc
   trunk-recorder/monitor_systems.cc
   trunk-recorder/talkgroup.cc
@@ -390,7 +392,7 @@ foreach(plugin_dir ${plugin_dirs})
   endif()
 endforeach()
 
-add_executable(trunk-recorder trunk-recorder/main.cc) # ${trunk_recorder_sources})
+add_executable(trunk-recorder trunk-recorder/main.cc trunk-recorder/api/management_api.cc) # ${trunk_recorder_sources})
 
 target_link_libraries(trunk-recorder git trunk_recorder_library gnuradio-op25_repeater   ${CMAKE_DL_LIBS} ssl crypto ${CURL_LIBRARIES} ${Boost_LIBRARIES} ${GNURADIO_PMT_LIBRARIES} ${GNURADIO_RUNTIME_LIBRARIES} ${GNURADIO_FILTER_LIBRARIES} ${GNURADIO_DIGITAL_LIBRARIES} ${GNURADIO_ANALOG_LIBRARIES} ${GNURADIO_AUDIO_LIBRARIES} ${GNURADIO_UHD_LIBRARIES} ${UHD_LIBRARIES} ${GNURADIO_BLOCKS_LIBRARIES} ${GNURADIO_OSMOSDR_LIBRARIES} ) # gRPC::grpc++_reflection protobuf::libprotobuf)
 

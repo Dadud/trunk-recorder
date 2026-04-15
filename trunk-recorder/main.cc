@@ -39,6 +39,7 @@
 #include "config.h"
 #include "recorder_globals.h"
 #include "source.h"
+#include "api/management_api.h"
 
 #include "recorders/analog_recorder.h"
 #include "recorders/p25_recorder.h"
@@ -84,6 +85,7 @@ std::vector<Call *> monitored_calls;
 gr::top_block_sptr tb;
 
 Config config;
+ApiRuntimeState api_runtime_state;
 
 int main(int argc, char **argv) {
   // BOOST_STATIC_ASSERT(true) __attribute__((unused));
@@ -121,6 +123,12 @@ int main(int argc, char **argv) {
     exit(1);
   }
 
+  std::unique_ptr<ManagementApi> management_api;
+  if (config.api_enabled) {
+    management_api = std::make_unique<ManagementApi>(config.api_bind_host, config.api_port, config.api_token, config.config_file, &api_runtime_state);
+    management_api->start();
+  }
+
   start_plugins(sources, systems);
 
   if (setup_systems(config, tb, sources, systems, calls)) {
@@ -140,6 +148,10 @@ int main(int argc, char **argv) {
     stop_plugins();
   } else {
     BOOST_LOG_TRIVIAL(error) << "Unable to setup a System to record, exiting..." << std::endl;
+  }
+
+  if (management_api) {
+    management_api->stop();
   }
 
   return exit_code;
