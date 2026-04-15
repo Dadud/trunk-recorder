@@ -33,3 +33,5 @@ debug_recorder.py
 /.cache/
 .gitmodules
 user_plugins/*/
+__pycache__/
+*.pyc

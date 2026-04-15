@@ -11,6 +11,36 @@ on:
       - v*
 
 jobs:
+  api-fixture-check:
+    runs-on: ubuntu-latest
+    steps:
+      -
+        name: Checkout
+        uses: actions/checkout@v4
+      -
+        name: Validate API sample fixture
+        run: |
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+          sample = Path('tests/api/sample-config.json')
+          data = json.loads(sample.read_text())
+          assert data['api']['bind'] == '127.0.0.1'
+          assert data['api']['port'] == 8765
+          assert data['ver'] >= 2
+          assert isinstance(data['sources'], list) and data['sources']
+          assert isinstance(data['systems'], list) and data['systems']
+          system = data['systems'][0]
+          assert system['talkgroupsFile'] == 'talkgroups.csv'
+          assert system['unitTagsFile'] == 'unit-tags.csv'
+          assert data['sources'][0]['driver'] in {'osmosdr', 'usrp', 'iqfile', 'sigmf', 'sigmffile'}
+          assert isinstance(data['api']['token'], str)
+          for system in data['systems']:
+              if system['type'].startswith('conventional') or system['type'] == 'conventional':
+                  assert ('channels' in system) ^ ('channelFile' in system)
+          print('api sample fixture ok')
+          PY
+
   buildx:
     runs-on: ubuntu-latest
     permissions:
