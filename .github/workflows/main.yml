@@ -31,6 +31,10 @@ jobs:
           assert data['ver'] >= 2
           assert isinstance(data['sources'], list) and data['sources']
           assert isinstance(data['systems'], list) and data['systems']
+          system = data['systems'][0]
+          assert system['talkgroupsFile'] == 'talkgroups.csv'
+          assert system['unitTagsFile'] == 'unit-tags.csv'
+          assert data['sources'][0]['driver'] in {'osmosdr', 'usrp', 'iqfile', 'sigmf', 'sigmffile'}
           print('api sample fixture ok')
           PY
 

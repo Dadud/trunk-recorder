@@ -1,9 +1,11 @@
 #include "config_manager.h"
 
-#include <fstream>
 #include <cstdio>
+#include <filesystem>
+#include <fstream>
 
 using json = nlohmann::json;
+namespace fs = std::filesystem;
 
 static void add_issue(ConfigValidationResult &result, const std::string &path, const std::string &message, const std::string &severity = "error") {
   result.issues.push_back({path, message, severity});
@@ -33,6 +35,10 @@ ConfigValidationResult validate_config_json(const json &data) {
     add_issue(result, "/systems", "systems must be an array");
   } else if (data["systems"].empty()) {
     add_issue(result, "/systems", "systems must contain at least one system");
+  }
+
+  if (data.contains("api") && !data["api"].is_object()) {
+    add_issue(result, "/api", "api must be an object when present");
   }
 
   if (data.contains("sources") && data["sources"].is_array()) {
@@ -96,9 +102,16 @@ std::string redact_config_json(const json &data, bool reveal_secrets) {
   return copy.dump(2);
 }
 
-bool write_config_json_atomic(const std::string &config_file, const json &data, std::string &error) {
-  const std::string tmp_file = config_file + ".tmp";
-  const std::string backup_file = config_file + ".bak";
+bool write_text_file_atomic(const std::string &path, const std::string &content, std::string &error) {
+  const std::string tmp_file = path + ".tmp";
+  const std::string backup_file = path + ".bak";
+
+  try {
+    fs::create_directories(fs::path(path).parent_path());
+  } catch (...) {
+    error = "unable to create parent directories";
+    return false;
+  }
 
   {
     std::ofstream out(tmp_file, std::ios::trunc);
@@ -106,30 +119,39 @@ bool write_config_json_atomic(const std::string &config_file, const json &data, 
       error = "unable to open temporary file for writing";
       return false;
     }
-    out << data.dump(2) << std::endl;
+    out << content;
+    if (!content.empty() && content.back() != '\n') out << std::endl;
     out.flush();
     if (!out.good()) {
-      error = "failed writing temporary config file";
+      error = "failed writing temporary file";
       return false;
     }
   }
 
-  std::ifstream existing(config_file);
+  std::ifstream existing(path);
   if (existing.good()) {
     existing.close();
     std::remove(backup_file.c_str());
-    if (std::rename(config_file.c_str(), backup_file.c_str()) != 0) {
-      error = "unable to create config backup";
-      std::remove(tmp_file.c_str());
-      return false;
-    }
+    std::rename(path.c_str(), backup_file.c_str());
   }
 
-  if (std::rename(tmp_file.c_str(), config_file.c_str()) != 0) {
-    error = "unable to replace config file";
+  if (std::rename(tmp_file.c_str(), path.c_str()) != 0) {
+    error = "unable to replace target file";
     std::remove(tmp_file.c_str());
     return false;
   }
 
   return true;
+}
+
+bool write_config_json_atomic(const std::string &config_file, const json &data, std::string &error) {
+  return write_text_file_atomic(config_file, data.dump(2), error);
+}
+
+std::string resolve_system_relative_path(const std::string &config_file, const std::string &relative_or_absolute_path) {
+  if (relative_or_absolute_path.empty()) return "";
+  fs::path input(relative_or_absolute_path);
+  if (input.is_absolute()) return input.string();
+  fs::path base = fs::absolute(fs::path(config_file)).parent_path();
+  return (base / input).string();
 }
