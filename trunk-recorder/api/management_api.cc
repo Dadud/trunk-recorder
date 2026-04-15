@@ -228,6 +228,19 @@ bool ManagementApi::start() {
         json_response(res, {{"error", "system_not_found"}}, 404);
         return;
       }
+
+      // Basic structural validation: check column counts and non-emptiness.
+      // Full semantic parsing is done by trunk-recorder's talkgroups.cc.
+      auto csv_result = validate_talkgroups_csv(req.body);
+      if (!csv_result.ok) {
+        json issues = json::array();
+        for (const auto &issue : csv_result.issues) {
+          issues.push_back({{"path", issue.path}, {"message", issue.message}});
+        }
+        json_response(res, {{"error", "csv_validation_failed"}, {"issues", issues}}, 400);
+        return;
+      }
+
       const auto &system = parsed["systems"][index];
       const std::string file_path = resolve_system_relative_path(config_path, system.value("talkgroupsFile", ""));
       std::string error;
@@ -273,6 +286,19 @@ bool ManagementApi::start() {
         json_response(res, {{"error", "system_not_found"}}, 404);
         return;
       }
+
+      // Basic structural validation: check column counts and non-emptiness.
+      // Full semantic parsing is done by trunk-recorder's unit_tags.cc.
+      auto csv_result = validate_unit_tags_csv(req.body);
+      if (!csv_result.ok) {
+        json issues = json::array();
+        for (const auto &issue : csv_result.issues) {
+          issues.push_back({{"path", issue.path}, {"message", issue.message}});
+        }
+        json_response(res, {{"error", "csv_validation_failed"}, {"issues", issues}}, 400);
+        return;
+      }
+
       const auto &system = parsed["systems"][index];
       const std::string file_path = resolve_system_relative_path(config_path, system.value("unitTagsFile", ""));
       std::string error;

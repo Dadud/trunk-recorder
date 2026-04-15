@@ -1,8 +1,10 @@
 #include "config_manager.h"
 
+#include <cctype>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <sstream>
 #include <set>
 
 using json = nlohmann::json;
@@ -22,6 +24,92 @@ static bool is_number_array(const json &value) {
 
 static bool is_string_in(const std::string &value, const std::set<std::string> &allowed) {
   return allowed.find(value) != allowed.end();
+}
+
+// ---------------------------------------------------------------------------
+// Helper CSV structural validation
+// These provide basic sanity checks only. Full parsing and semantic
+// validation is done by trunk-recorder's talkgroups.cc / unit_tags.cc.
+// ---------------------------------------------------------------------------
+
+static std::vector<std::string> split_csv_line(const std::string &line) {
+  std::vector<std::string> fields;
+  std::string field;
+  std::istringstream iss(line);
+  while (std::getline(iss, field, ',')) {
+    // trim leading/trailing whitespace
+    size_t start = field.find_first_not_of(" \t");
+    size_t end = field.find_last_not_of(" \t");
+    if (start == std::string::npos) {
+      fields.push_back("");
+    } else {
+      fields.push_back(field.substr(start, end - start + 1));
+    }
+  }
+  return fields;
+}
+
+static int count_csv_columns(const std::string &text) {
+  std::istringstream iss(text);
+  std::string line;
+  if (!std::getline(iss, line)) return -1;
+  return static_cast<int>(split_csv_line(line).size());
+}
+
+CsvValidationResult validate_talkgroups_csv(const std::string &content) {
+  CsvValidationResult result;
+  if (content.empty()) {
+    result.issues.push_back({"talkgroups", "talkgroups CSV content is empty"});
+    return result;
+  }
+
+  std::istringstream iss(content);
+  std::string line;
+  int line_num = 0;
+
+  while (std::getline(iss, line)) {
+    line_num++;
+    if (line.empty()) continue;
+    if (line[0] == '#') continue;  // allow comment lines
+    auto fields = split_csv_line(line);
+    if (fields.size() < 2) {
+      result.issues.push_back({
+        "talkgroups:" + std::to_string(line_num),
+        "talkgroups CSV row has fewer than 2 fields (expected 8): " + std::to_string(fields.size())
+      });
+    }
+  }
+
+  result.ok = result.issues.empty();
+  return result;
+}
+
+CsvValidationResult validate_unit_tags_csv(const std::string &content) {
+  CsvValidationResult result;
+  if (content.empty()) {
+    result.issues.push_back({"unit-tags", "unit-tags CSV content is empty"});
+    return result;
+  }
+
+  std::istringstream iss(content);
+  std::string line;
+  int line_num = 0;
+
+  while (std::getline(iss, line)) {
+    line_num++;
+    if (line.empty()) continue;
+    if (line[0] == '#') continue;
+    auto fields = split_csv_line(line);
+    if (fields.size() < 2) {
+      result.issues.push_back({
+        "unit-tags:" + std::to_string(line_num),
+        "unit-tags CSV row has fewer than 2 fields (expected 2): " + std::to_string(fields.size())
+      });
+    }
+  }
+
+  result.ok = result.issues.empty();
+  return result;
 }
 
 ConfigValidationResult validate_config_json(const json &data) {

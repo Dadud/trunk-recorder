@@ -11,7 +11,8 @@ Current behavior in this branch:
 - token auth required for mutation endpoints
 - write paths validate before persistence
 - config and helper-file writes use atomic replacement with backup behavior
-- apply requests are explicit and currently conservative, many changes still imply restart required
+- helper CSV endpoints validate basic column structure before persisting
+- apply requests are explicit and currently conservative; most changes still imply restart is required
 
 ## Config example
 
@@ -115,14 +116,20 @@ These remain true:
 
 ## Current limitations
 
-- runtime apply is intentionally conservative and should be treated as persist plus explicit reload intent, not guaranteed live reconfiguration
-- helper-file endpoints currently operate on referenced files, not a richer parsed object model
+- runtime apply is intentionally conservative and should be treated as persist
+  plus explicit reload intent, not guaranteed live reconfiguration
+- the `/api/v1/config/apply` response always sets `restartRequired: true`
+  — this API does not claim hot reload
+- helper-file endpoints currently operate on referenced files with basic
+  structural validation; they do not provide a richer parsed object model
 - schema output is lightweight and not yet a full metadata registry
 - integration coverage still needs to grow
 
 ## Validation scope in this branch
 
-Current validation covers a useful but still incomplete subset of the live config surface, including:
+Config JSON validation covers a useful but still incomplete subset of the live
+config surface, including:
+
 - top-level config shape
 - API block shape and required token when enabled
 - source driver/type and common numeric/integer fields
@@ -132,4 +139,10 @@ Current validation covers a useful but still incomplete subset of the live confi
 - helper-file reference field types
 - audio postprocess object field types
 
-This should be treated as a strong baseline, not a claim that every current and future config field is exhaustively metadata-modeled.
+This should be treated as a strong baseline, not a claim that every current
+and future config field is exhaustively metadata-modeled.
+
+Helper CSV validation is structural only (column counts and non-emptiness per
+row). Full semantic parsing — talkgroup number formats, decimal/hex parity,
+unit ID types — is performed by trunk-recorder's `talkgroups.cc` /
+`unit_tags.cc` at runtime.
