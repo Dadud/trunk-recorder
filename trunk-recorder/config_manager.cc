@@ -3,12 +3,25 @@
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
+#include <set>
 
 using json = nlohmann::json;
 namespace fs = std::filesystem;
 
 static void add_issue(ConfigValidationResult &result, const std::string &path, const std::string &message, const std::string &severity = "error") {
   result.issues.push_back({path, message, severity});
+}
+
+static bool is_number_array(const json &value) {
+  if (!value.is_array()) return false;
+  for (const auto &entry : value) {
+    if (!entry.is_number()) return false;
+  }
+  return true;
+}
+
+static bool is_string_in(const std::string &value, const std::set<std::string> &allowed) {
+  return allowed.find(value) != allowed.end();
 }
 
 ConfigValidationResult validate_config_json(const json &data) {
@@ -25,6 +38,13 @@ ConfigValidationResult validate_config_json(const json &data) {
     add_issue(result, "/ver", "ver must be 2 or greater");
   }
 
+  if (data.contains("defaultMode") && data["defaultMode"].is_string()) {
+    const std::string mode = data["defaultMode"].get<std::string>();
+    if (!is_string_in(mode, {"analog", "digital"})) {
+      add_issue(result, "/defaultMode", "defaultMode must be either analog or digital");
+    }
+  }
+
   if (!data.contains("sources") || !data["sources"].is_array()) {
     add_issue(result, "/sources", "sources must be an array");
   } else if (data["sources"].empty()) {
@@ -37,8 +57,24 @@ ConfigValidationResult validate_config_json(const json &data) {
     add_issue(result, "/systems", "systems must contain at least one system");
   }
 
-  if (data.contains("api") && !data["api"].is_object()) {
-    add_issue(result, "/api", "api must be an object when present");
+  if (data.contains("api")) {
+    if (!data["api"].is_object()) {
+      add_issue(result, "/api", "api must be an object when present");
+    } else {
+      const auto &api = data["api"];
+      if (api.contains("enabled") && !api["enabled"].is_boolean()) add_issue(result, "/api/enabled", "enabled must be a boolean");
+      if (api.contains("bind") && !api["bind"].is_string()) add_issue(result, "/api/bind", "bind must be a string");
+      if (api.contains("port") && !api["port"].is_number_integer()) {
+        add_issue(result, "/api/port", "port must be an integer");
+      } else if (api.contains("port")) {
+        const int port = api["port"].get<int>();
+        if (port <= 0 || port > 65535) add_issue(result, "/api/port", "port must be between 1 and 65535");
+      }
+      if (api.contains("token") && !api["token"].is_string()) add_issue(result, "/api/token", "token must be a string");
+      if (api.value("enabled", false) && api.value("token", std::string()).empty()) {
+        add_issue(result, "/api/token", "token is required when api.enabled is true");
+      }
+    }
   }
 
   if (data.contains("sources") && data["sources"].is_array()) {
@@ -49,14 +85,28 @@ ConfigValidationResult validate_config_json(const json &data) {
         add_issue(result, base, "source must be an object");
         continue;
       }
-      if (!source.contains("driver") || !source["driver"].is_string()) add_issue(result, base + "/driver", "driver must be a string");
-      if (!source.contains("rate") || !source["rate"].is_number()) add_issue(result, base + "/rate", "rate must be numeric");
-      if (source.contains("driver") && source["driver"].is_string()) {
+
+      if (!source.contains("driver") || !source["driver"].is_string()) {
+        add_issue(result, base + "/driver", "driver must be a string");
+      } else {
         const std::string driver = source["driver"].get<std::string>();
-        if (driver != "osmosdr" && driver != "usrp" && driver != "iqfile" && driver != "sigmf" && driver != "sigmffile") {
+        if (!is_string_in(driver, {"osmosdr", "usrp", "iqfile", "sigmf", "sigmffile"})) {
           add_issue(result, base + "/driver", "driver must be one of osmosdr, usrp, iqfile, sigmf, sigmffile");
         }
       }
+
+      if (!source.contains("rate") || !source["rate"].is_number()) add_issue(result, base + "/rate", "rate must be numeric");
+      if (source.contains("center") && !source["center"].is_number()) add_issue(result, base + "/center", "center must be numeric");
+      if (source.contains("error") && !source["error"].is_number()) add_issue(result, base + "/error", "error must be numeric");
+      if (source.contains("ppm") && !source["ppm"].is_number()) add_issue(result, base + "/ppm", "ppm must be numeric");
+      if (source.contains("gain") && !source["gain"].is_number()) add_issue(result, base + "/gain", "gain must be numeric");
+      if (source.contains("ifGain") && !source["ifGain"].is_number()) add_issue(result, base + "/ifGain", "ifGain must be numeric");
+      if (source.contains("bbGain") && !source["bbGain"].is_number()) add_issue(result, base + "/bbGain", "bbGain must be numeric");
+      if (source.contains("digitalRecorders") && !source["digitalRecorders"].is_number_integer()) add_issue(result, base + "/digitalRecorders", "digitalRecorders must be an integer");
+      if (source.contains("analogRecorders") && !source["analogRecorders"].is_number_integer()) add_issue(result, base + "/analogRecorders", "analogRecorders must be an integer");
+      if (source.contains("debugRecorders") && !source["debugRecorders"].is_number_integer()) add_issue(result, base + "/debugRecorders", "debugRecorders must be an integer");
+      if (source.contains("sigmfRecorders") && !source["sigmfRecorders"].is_number_integer()) add_issue(result, base + "/sigmfRecorders", "sigmfRecorders must be an integer");
+      if (source.contains("enabled") && !source["enabled"].is_boolean()) add_issue(result, base + "/enabled", "enabled must be a boolean");
     }
   }
 
@@ -68,13 +118,74 @@ ConfigValidationResult validate_config_json(const json &data) {
         add_issue(result, base, "system must be an object");
         continue;
       }
-      if (!system.contains("type") || !system["type"].is_string()) add_issue(result, base + "/type", "type must be a string");
-      if (system.contains("type") && system["type"].is_string()) {
-        const std::string type = system["type"].get<std::string>();
-        if (type == "p25" || type == "smartnet") {
-          if (!system.contains("control_channels") || !system["control_channels"].is_array() || system["control_channels"].empty()) {
-            add_issue(result, base + "/control_channels", "trunked systems require a non-empty control_channels array");
+
+      if (!system.contains("type") || !system["type"].is_string()) {
+        add_issue(result, base + "/type", "type must be a string");
+        continue;
+      }
+
+      const std::string type = system["type"].get<std::string>();
+      if (!is_string_in(type, {"p25", "smartnet", "conventional", "conventionalP25", "conventionalDMR", "conventionalSIGMF"})) {
+        add_issue(result, base + "/type", "system type is not recognized");
+      }
+
+      if (system.contains("shortName") && !system["shortName"].is_string()) add_issue(result, base + "/shortName", "shortName must be a string");
+      if (system.contains("modulation") && !system["modulation"].is_string()) add_issue(result, base + "/modulation", "modulation must be a string");
+      if (system.contains("squelch") && !system["squelch"].is_number()) add_issue(result, base + "/squelch", "squelch must be numeric");
+      if (system.contains("analogLevels") && !system["analogLevels"].is_number()) add_issue(result, base + "/analogLevels", "analogLevels must be numeric");
+      if (system.contains("digitalLevels") && !system["digitalLevels"].is_number()) add_issue(result, base + "/digitalLevels", "digitalLevels must be numeric");
+      if (system.contains("maxDev") && !system["maxDev"].is_number_integer()) add_issue(result, base + "/maxDev", "maxDev must be an integer");
+      if (system.contains("filterWidth") && !system["filterWidth"].is_number()) add_issue(result, base + "/filterWidth", "filterWidth must be numeric");
+      if (system.contains("conversationMode") && !system["conversationMode"].is_boolean()) add_issue(result, base + "/conversationMode", "conversationMode must be a boolean");
+      if (system.contains("talkgroupsFile") && !system["talkgroupsFile"].is_string()) add_issue(result, base + "/talkgroupsFile", "talkgroupsFile must be a string");
+      if (system.contains("unitTagsFile") && !system["unitTagsFile"].is_string()) add_issue(result, base + "/unitTagsFile", "unitTagsFile must be a string");
+      if (system.contains("unitTagsOTA") && !system["unitTagsOTA"].is_string()) add_issue(result, base + "/unitTagsOTA", "unitTagsOTA must be a string");
+      if (system.contains("unitTagsMode") && system["unitTagsMode"].is_string()) {
+        const std::string mode = system["unitTagsMode"].get<std::string>();
+        if (!is_string_in(mode, {"user", "ota", "OTA", "user_only", "none"})) {
+          add_issue(result, base + "/unitTagsMode", "unitTagsMode must be one of user, ota, OTA, user_only, none");
+        }
+      } else if (system.contains("unitTagsMode")) {
+        add_issue(result, base + "/unitTagsMode", "unitTagsMode must be a string");
+      }
+
+      if (type == "p25" || type == "smartnet") {
+        if (!system.contains("control_channels") || !is_number_array(system["control_channels"]) || system["control_channels"].empty()) {
+          add_issue(result, base + "/control_channels", "trunked systems require a non-empty control_channels array");
+        }
+      }
+
+      if (type == "conventional" || type == "conventionalP25" || type == "conventionalDMR" || type == "conventionalSIGMF") {
+        const bool channel_file_exists = system.contains("channelFile");
+        const bool channels_exist = system.contains("channels");
+        if (channel_file_exists && channels_exist) {
+          add_issue(result, base, "Both \"channels\" and \"channelFile\" cannot be defined for a system!");
+        }
+        if (!channel_file_exists && !channels_exist) {
+          add_issue(result, base, "Either \"channels\" or \"channelFile\" need to be defined for a conventional system!");
+        }
+        if (channel_file_exists && !system["channelFile"].is_string()) {
+          add_issue(result, base + "/channelFile", "channelFile must be a string");
+        }
+        if (channels_exist && (!is_number_array(system["channels"]) || system["channels"].empty())) {
+          add_issue(result, base + "/channels", "channels must be a non-empty numeric array");
+        }
+      }
+
+      if (system.contains("audio_postprocess")) {
+        if (!system["audio_postprocess"].is_object()) {
+          add_issue(result, base + "/audio_postprocess", "audio_postprocess must be an object");
+        } else {
+          const auto &audio = system["audio_postprocess"];
+          const std::vector<std::string> numeric_fields = {"highpass_hz", "lowpass_hz", "bandreject_hz", "bandreject_width_hz", "loudnorm_i", "loudnorm_tp", "loudnorm_lra"};
+          const std::vector<std::string> bool_fields = {"enabled", "loudnorm", "loudnorm_two_pass"};
+          for (const auto &field : numeric_fields) {
+            if (audio.contains(field) && !audio[field].is_number()) add_issue(result, base + "/audio_postprocess/" + field, field + " must be numeric");
           }
+          for (const auto &field : bool_fields) {
+            if (audio.contains(field) && !audio[field].is_boolean()) add_issue(result, base + "/audio_postprocess/" + field, field + " must be a boolean");
+          }
+          if (audio.contains("ffmpeg_filter") && !audio["ffmpeg_filter"].is_string()) add_issue(result, base + "/audio_postprocess/ffmpeg_filter", "ffmpeg_filter must be a string");
         }
       }
     }
@@ -107,7 +218,8 @@ bool write_text_file_atomic(const std::string &path, const std::string &content,
   const std::string backup_file = path + ".bak";
 
   try {
-    fs::create_directories(fs::path(path).parent_path());
+    fs::path parent = fs::path(path).parent_path();
+    if (!parent.empty()) fs::create_directories(parent);
   } catch (...) {
     error = "unable to create parent directories";
     return false;

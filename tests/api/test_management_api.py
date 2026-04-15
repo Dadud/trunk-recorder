@@ -33,3 +33,17 @@ def test_sample_config_helper_files_are_referenced():
 def test_sample_config_source_driver_is_supported():
     data = load_sample()
     assert data['sources'][0]['driver'] in {'osmosdr', 'usrp', 'iqfile', 'sigmf', 'sigmffile'}
+
+
+def test_sample_config_api_token_present_when_enabled():
+    data = load_sample()
+    assert data['api']['enabled'] is True
+    assert isinstance(data['api']['token'], str)
+    assert data['api']['token']
+
+
+def test_sample_config_conventional_constraints_shape_if_present():
+    data = load_sample()
+    for system in data['systems']:
+        if system['type'].startswith('conventional') or system['type'] == 'conventional':
+            assert ('channels' in system) ^ ('channelFile' in system)

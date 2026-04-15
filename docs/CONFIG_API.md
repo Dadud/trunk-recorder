@@ -115,7 +115,21 @@ These remain true:
 
 ## Current limitations
 
-- runtime apply is intentionally conservative
+- runtime apply is intentionally conservative and should be treated as persist plus explicit reload intent, not guaranteed live reconfiguration
 - helper-file endpoints currently operate on referenced files, not a richer parsed object model
 - schema output is lightweight and not yet a full metadata registry
 - integration coverage still needs to grow
+
+## Validation scope in this branch
+
+Current validation covers a useful but still incomplete subset of the live config surface, including:
+- top-level config shape
+- API block shape and required token when enabled
+- source driver/type and common numeric/integer fields
+- recognized system types
+- trunked-system control channel requirements
+- conventional-system channels vs channelFile exclusivity rules
+- helper-file reference field types
+- audio postprocess object field types
+
+This should be treated as a strong baseline, not a claim that every current and future config field is exhaustively metadata-modeled.
